@@ -1,0 +1,23 @@
+{
+  "model_name": "Logistic Regression",
+  "features": [
+    "tempreature",
+    "humidity",
+    "water_level",
+    "N",
+    "P",
+    "K",
+    "hour",
+    "day_of_week",
+    "is_weekend",
+    "nutrient_index"
+  ],
+  "target": "Watering_plant_pump_ON",
+  "metrics": {
+    "accuracy": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "roc_auc": 1.0
+  }
+}
