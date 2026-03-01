@@ -1,5 +1,5 @@
 {
-  "model_name": "Logistic Regression",
+  "model_name": "MultiLogistic",
   "features": [
     "tempreature",
     "humidity",
@@ -12,12 +12,24 @@
     "is_weekend",
     "nutrient_index"
   ],
-  "target": "Watering_plant_pump_ON",
+  "targets": [
+    "irrigation",
+    "fan"
+  ],
   "metrics": {
-    "accuracy": 1.0,
-    "precision": 1.0,
-    "recall": 1.0,
-    "f1": 1.0,
-    "roc_auc": 1.0
+    "irrigation": {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "roc_auc": 1.0
+    },
+    "fan": {
+      "accuracy": 0.9998681608437706,
+      "precision": 1.0,
+      "recall": 0.9995708154506437,
+      "f1": 0.9997853616655935,
+      "roc_auc": 0.9999713332489393
+    }
   }
 }
