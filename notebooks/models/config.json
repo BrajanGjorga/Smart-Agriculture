@@ -1,0 +1,44 @@
+{
+  "model_name": "RandomForest_MultiOutput",
+  "features": [
+    "tempreature",
+    "humidity",
+    "water_level",
+    "month",
+    "hour",
+    "day_of_week",
+    "is_weekend",
+    "nutrient_index"
+  ],
+  "targets": [
+    "irrigation",
+    "fan"
+  ],
+  "threshold": 0.9,
+  "metrics": {
+    "Irrigation_0.9": {
+      "Accuracy": 0.9774555042847726,
+      "Precision": 1.0,
+      "Recall": 0.017241379310344827,
+      "F1-score": 0.03389830508474576
+    },
+    "Fan_0.9": {
+      "Accuracy": 0.9944627554383652,
+      "Precision": 1.0,
+      "Recall": 0.976536312849162,
+      "F1-score": 0.9881288863764839
+    },
+    "Irrigation_0.95": {
+      "Accuracy": 0.9773236651285432,
+      "Precision": 1.0,
+      "Recall": 0.011494252873563218,
+      "F1-score": 0.022727272727272728
+    },
+    "Fan_0.95": {
+      "Accuracy": 0.9944627554383652,
+      "Precision": 1.0,
+      "Recall": 0.976536312849162,
+      "F1-score": 0.9881288863764839
+    }
+  }
+}
