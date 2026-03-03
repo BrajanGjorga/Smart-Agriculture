@@ -1,0 +1,88 @@
+\documentclass[sn-mathphys,Numbered]{sn-jnl}
+
+%% Standard packages (you can add more later if needed)
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{booktabs}
+\usepackage{xcolor}
+
+\begin{document}
+
+%% -----------------------------------------------------------------
+%% Title and authors
+%% -----------------------------------------------------------------
+
+\title[Smart Agriculture Prediction System]{Smart Agriculture Prediction System\\[4pt]
+\small Supervisor: PhD. Emiliano Mankolli}
+
+\author*[1]{\fnm{Brajan} \sur{Gjorga}}
+\author[1]{\fnm{Ersa} \sur{M\"ezuraj}}
+\author[1]{\fnm{Ersona} \sur{Duro}}
+\author[1]{\fnm{Kanita} \sur{Kadiu}}
+
+\affil*[1]{\orgdiv{Department of Engineering and Architecture}, \orgname{University of New York Tirana}, \city{Tirana}, \country{Albania}}
+
+%% -----------------------------------------------------------------
+%% Abstract and keywords (you can overwrite later)
+%% -----------------------------------------------------------------
+
+\abstract{This report presents the design and evaluation of the \textit{Smart Agriculture Prediction System}, a machine-learning based approach for controlling irrigation and ventilation in a greenhouse environment.}
+
+\keywords{smart agriculture, irrigation, prediction system, machine learning}
+
+\maketitle
+
+\clearpage
+\tableofcontents
+\clearpage
+
+%% -----------------------------------------------------------------
+%% Main sections (placeholders for your text)
+%% -----------------------------------------------------------------
+
+\section{Introduction}\label{sec:intro}
+
+
+\section{Introduction}\label{sec:intro}
+
+ on the real work you did in \texttt{Irrigation\_TimeSeries.ipynb}:
+% - Smart agriculture context and problem definition
+% - Why we need predictions for water pump and fan (ON/OFF)
+% - High-level description of the time-aware model and the demo web app
+
+
+\section{Methodology}\label{sec:methodology}
+
+% TODO: Describe the methodology here, based on Irrigation_TimeSeries.ipynb and the Flask app.
+% Suggested points:
+% - Dataset (sensors: temperature, humidity, water level, N, P, K; time stamps; actuator states)
+% - Cleaning and target construction (irrigation and fan ON/OFF)
+% - Feature engineering: month, hour, day_of_week, is_weekend, nutrient_index
+% - Time-based train/test split (no shuffling)
+% - Model: multi-output RandomForest in a sklearn Pipeline (preprocessor + classifier)
+% - Thresholds (0.85, 0.9, 0.95) and the choice of 0.9 for the app
+% - 10\% noise robustness experiment
+
+
+\section{Results}\label{sec:results}
+
+% TODO: Summarize the main experimental results.
+% Suggested points:
+% - Metrics for irrigation and fan prediction on the time-based test set
+% - Confusion matrices for thresholds 0.85, 0.9, 0.95
+% - Effect of adding 10\% noise to training features
+% - Feature importance discussion (which sensors and time-features matter most)
+% - Short description of how the demo app uses the pipeline (``what to do now'' + 24h schedule)
+
+
+\section{Conclusion}\label{sec:conclusion}
+
+% TODO: Write the conclusion here.
+% Suggested points:
+% - What the Smart Agriculture Prediction System achieves in practice
+% - Benefits and limitations of the current model and app
+% - Ideas for future improvements (better sensors, more advanced time-series models, richer schedules)
+
+
+\end{document}
+

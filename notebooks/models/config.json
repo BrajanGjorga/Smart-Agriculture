@@ -14,7 +14,7 @@
     "irrigation",
     "fan"
   ],
-  "threshold": 0.9,
+  "threshold": 0.8,
   "metrics": {
     "Irrigation_0.9": {
       "Accuracy": 0.9774555042847726,

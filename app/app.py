@@ -39,13 +39,29 @@ print("[OK] Pipeline loaded successfully.")
 
 # --- Load config: feature order, threshold ---
 FEATURE_ORDER = None
-THRESHOLD = 0.9
+DEFAULT_THRESHOLD = 0.9
+
+
+def load_config():
+    """Load feature order and threshold from config (re-read so threshold changes apply without restart)."""
+    global FEATURE_ORDER
+    order = FEATURE_ORDER  # keep first load for feature order
+    threshold = float(DEFAULT_THRESHOLD)
+    if CONFIG_PATH.exists():
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+            if order is None:
+                order = cfg.get("features")
+            threshold = float(cfg.get("threshold", DEFAULT_THRESHOLD))
+    return order, threshold
+
+
+# Initial load
+_feature_order, _threshold = load_config()
+if FEATURE_ORDER is None:
+    FEATURE_ORDER = _feature_order
 if CONFIG_PATH.exists():
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        cfg = json.load(f)
-        FEATURE_ORDER = cfg.get("features")
-        THRESHOLD = float(cfg.get("threshold", 0.9))
-    print(f"[OK] Config loaded. Feature order: {FEATURE_ORDER}, threshold: {THRESHOLD}")
+    print(f"[OK] Config loaded. Feature order: {FEATURE_ORDER}, threshold: {_threshold}")
 else:
     print(f"[WARN] No config found at {CONFIG_PATH}. Using default feature order and threshold.")
 
@@ -162,13 +178,14 @@ def predict():
 
         # Pipeline: predict_proba returns list of (n, 2) arrays per target
         probas = pipeline.predict_proba(input_df)
+        _, threshold = load_config()
 
         predictions = []
         for i in range(len(input_df)):
             irrigation_prob = float(probas[0][i][1]) if probas[0] is not None else None
             fan_prob = float(probas[1][i][1]) if len(probas) > 1 and probas[1] is not None else None
-            irrigation_on = irrigation_prob is not None and irrigation_prob >= THRESHOLD
-            fan_on = fan_prob is not None and fan_prob >= THRESHOLD
+            irrigation_on = irrigation_prob is not None and irrigation_prob >= threshold
+            fan_on = fan_prob is not None and fan_prob >= threshold
             predictions.append({
                 "irrigation": {
                     "label": "YES" if irrigation_on else "NO",
@@ -204,6 +221,7 @@ def schedule():
     start = pd.to_datetime(data["start_time"])
     sensors = data["sensors"]
     interval_minutes = int(data.get("interval_minutes", 60))
+    _, threshold = load_config()
 
     try:
         slots = []
@@ -219,8 +237,8 @@ def schedule():
             fan_p = float(probas[1][0][1]) if len(probas) > 1 and probas[1] is not None else 0.0
             slots.append({
                 "time": t.isoformat(),
-                "irrigation": 1 if irr_p >= THRESHOLD else 0,
-                "fan": 1 if fan_p >= THRESHOLD else 0,
+                "irrigation": 1 if irr_p >= threshold else 0,
+                "fan": 1 if fan_p >= threshold else 0,
             })
             t = t + pd.Timedelta(minutes=interval_minutes)
 
