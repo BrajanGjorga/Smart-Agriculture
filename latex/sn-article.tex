@@ -5,6 +5,7 @@
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{booktabs}
 \usepackage{xcolor}
+\usepackage{placeins} % keep figures within their sections
 
 \begin{document}
 
@@ -12,77 +13,366 @@
 %% Title and authors
 %% -----------------------------------------------------------------
 
-\title[Smart Agriculture Prediction System]{Smart Agriculture Prediction System\\[4pt]
-\small Supervisor: PhD. Emiliano Mankolli}
+\begin{titlepage}
+  \centering
+  \vspace*{0.25\textheight} % move block to vertical middle
 
-\author*[1]{\fnm{Brajan} \sur{Gjorga}}
-\author[1]{\fnm{Ersa} \sur{M\"ezuraj}}
-\author[1]{\fnm{Ersona} \sur{Duro}}
-\author[1]{\fnm{Kanita} \sur{Kadiu}}
+  {\LARGE Smart Agriculture Prediction System\par}
+  \vspace{0.5cm}
+  {\large Supervisor: PhD. Emiliano Mankolli\par}
+  \vspace{1.0cm}
 
-\affil*[1]{\orgdiv{Department of Engineering and Architecture}, \orgname{University of New York Tirana}, \city{Tirana}, \country{Albania}}
+  {\large
+      Brajan Gjorga\\
+      Ersa M\"ezuraj\\
+      Ersona Duro\\
+      Kanita Kadiu\par
+  }
+  \vspace{1.0cm}
 
-%% -----------------------------------------------------------------
-%% Abstract and keywords (you can overwrite later)
-%% -----------------------------------------------------------------
+  {\large
+      Department of Engineering and Architecture\\
+      University of New York Tirana, Tirana, Albania\par
+  }
 
-\abstract{This report presents the design and evaluation of the \textit{Smart Agriculture Prediction System}, a machine-learning based approach for controlling irrigation and ventilation in a greenhouse environment.}
+  \vfill
+\end{titlepage}
 
-\keywords{smart agriculture, irrigation, prediction system, machine learning}
-
-\maketitle
-
-\clearpage
+\setcounter{page}{1}
 \tableofcontents
 \clearpage
 
 %% -----------------------------------------------------------------
-%% Main sections (placeholders for your text)
+%% Main sections
 %% -----------------------------------------------------------------
 
 \section{Introduction}\label{sec:intro}
 
+Efficient water and environmental control are critical components of modern precision agriculture.  
+Traditional irrigation and ventilation scheduling methods in greenhouses are typically manual or rule-based, which can lead to water overuse, plant stress, or inefficient climate regulation.  
 
-\section{Introduction}\label{sec:intro}
+In this project we develop a time-aware prediction system that learns, from historical greenhouse sensor data, when:
+\begin{itemize}
+    \item irrigation should be activated, and
+    \item a ventilation fan should be activated,
+\end{itemize}
+based purely on recent sensor readings and time information.  
+The system is trained on a real greenhouse dataset containing temperature, humidity, water level and soil nutrient measurements, together with the actual actuator states (water pump and fan ON/OFF).  
 
- on the real work you did in \texttt{Irrigation\_TimeSeries.ipynb}:
-% - Smart agriculture context and problem definition
-% - Why we need predictions for water pump and fan (ON/OFF)
-% - High-level description of the time-aware model and the demo web app
-
+The predictive core of the system is a multi-output binary classifier implemented with a Random Forest inside a scikit-learn pipeline.  
+The trained model is exposed through a Flask web application that provides two main services: (i) a ``what to do now'' recommendation given the current sensors and timestamp, and (ii) a 24-hour schedule of expected irrigation and fan activations assuming fixed sensor conditions.  
+All experiments and model development are implemented in the Jupyter notebook \texttt{Irrigation\_TimeSeries.ipynb}, while the deployment code lives in \texttt{app/app.py}.
 
 \section{Methodology}\label{sec:methodology}
 
-% TODO: Describe the methodology here, based on Irrigation_TimeSeries.ipynb and the Flask app.
-% Suggested points:
-% - Dataset (sensors: temperature, humidity, water level, N, P, K; time stamps; actuator states)
-% - Cleaning and target construction (irrigation and fan ON/OFF)
-% - Feature engineering: month, hour, day_of_week, is_weekend, nutrient_index
-% - Time-based train/test split (no shuffling)
-% - Model: multi-output RandomForest in a sklearn Pipeline (preprocessor + classifier)
-% - Thresholds (0.85, 0.9, 0.95) and the choice of 0.9 for the app
-% - 10\% noise robustness experiment
+\subsection{Dataset and Targets}
 
+The dataset consists of chronologically ordered measurements collected from a smart greenhouse between November~2023 and March~2024.  
+Each record contains:
+\begin{itemize}
+    \item a timestamp,
+    \item sensor readings: air \textbf{temperature}, \textbf{humidity}, \textbf{water\_level}, and soil nutrients \textbf{N}, \textbf{P}, \textbf{K},
+    \item actuator states: irrigation pump ON/OFF and ventilation fan ON/OFF.
+\end{itemize}
+After basic cleaning (removal of duplicate timestamps and obviously corrupted rows) we construct two binary targets:
+\begin{itemize}
+    \item $y_{\text{irr}} \in \{0,1\}$: whether irrigation is active,
+    \item $y_{\text{fan}} \in \{0,1\}$: whether the ventilation fan is active.
+\end{itemize}
+These two outputs are predicted simultaneously from the same feature vector.
+
+\subsection{Feature Engineering}
+
+To keep the final model simple and deployable, we restrict the features to quantities that are directly available from sensors or easily derived from the timestamp.  
+From each timestamp we extract:
+\begin{itemize}
+    \item \textbf{month},
+    \item \textbf{hour of day},
+    \item \textbf{day\_of\_week} (0--6),
+    \item a binary \textbf{is\_weekend} flag.
+\end{itemize}
+From the three nutrient readings we compute a single aggregated index:
+\[
+\text{nutrient\_index} = \frac{N + P + K}{3}.
+\]
+The final feature set used by the model is therefore:
+\[
+\{\text{temperature}, \text{humidity}, \text{water\_level}, \text{month}, \text{hour}, \text{day\_of\_week}, \text{is\_weekend}, \text{nutrient\_index}\}.
+\]
+These are exactly the features reconstructed from the HTTP request payload in the Flask app before being passed to the model pipeline.
+
+\subsection{Time-Aware Train--Test Split}
+
+Because actuator decisions depend on time and conditions evolve over the season, we avoid random shuffling and respect chronological order.  
+The first part of the time series (approximately 80\% of the observations) is used for training, while the final 20\% is kept as a held-out test set that simulates future, unseen data.  
+This ensures that evaluation more closely approximates real deployment, where the model must predict future actuator behaviour from past observations.
+
+\subsection{Model Architecture}
+
+The predictive model is implemented as a scikit-learn \texttt{Pipeline} consisting of:
+\begin{itemize}
+    \item a numeric pre-processing step (imputation and scaling of continuous features), and
+    \item a multi-output classifier: \texttt{MultiOutputClassifier} wrapping a \texttt{RandomForestClassifier}.
+\end{itemize}
+The Random Forest operates directly on the engineered features and produces two probability outputs: one for irrigation activation and one for fan activation.  
+Given a feature matrix $X$, the model returns for each sample the estimated probabilities:
+\[
+P(y_{\text{irr}} = 1 \mid X), \qquad P(y_{\text{fan}} = 1 \mid X).
+\]
+During deployment these probabilities are compared against a configurable probability threshold (stored in a JSON configuration file) to obtain final ON/OFF decisions.  
+The notebook explores several reasonable Random Forest settings (number of trees, depth and regularisation) and settles on a configuration that balances accuracy and overfitting for this dataset.
+
+\subsection{Implementation and Deployment}
+
+Once trained and validated inside \texttt{Irrigation\_TimeSeries.ipynb}, the fitted pipeline is serialised with \texttt{joblib} and saved under \texttt{notebooks/models/model.pkl}, together with a small \texttt{config.json} that records the expected feature order and the decision threshold.  
+The Flask application in \texttt{app/app.py} loads this pipeline at start-up and exposes two JSON endpoints:
+\begin{itemize}
+    \item \texttt{/predict}: computes a ``what to do now'' recommendation from a single timestamp and current sensor readings,
+    \item \texttt{/schedule}: given a starting time and constant sensor values, generates a 24-hour schedule of irrigation and fan activations at regular intervals.
+\end{itemize}
+An HTML front-end (\texttt{templates/index.html}) allows manual input of sensor values and displays the model decisions in a user-friendly way.
 
 \section{Results}\label{sec:results}
 
-% TODO: Summarize the main experimental results.
-% Suggested points:
-% - Metrics for irrigation and fan prediction on the time-based test set
-% - Confusion matrices for thresholds 0.85, 0.9, 0.95
-% - Effect of adding 10\% noise to training features
-% - Feature importance discussion (which sensors and time-features matter most)
-% - Short description of how the demo app uses the pipeline (``what to do now'' + 24h schedule)
+We evaluate the model on the held-out, chronologically later portion of the dataset using accuracy, precision, recall and F1-score.  
+To study the effect of the decision threshold we test four probability cut-offs (0.80, 0.85, 0.90 and 0.95), and we additionally repeat training with artificial noise added to the input features.
 
+\subsection{Predictive Performance and Thresholds}
+
+Figure~\ref{fig:nutrients-over-time} shows the evolution of \textbf{water\_level} and nutrient conditions over time, together with irrigation events, illustrating the strong link between low moisture and pump activation.  
+The confusion matrices in Figures~\ref{fig:conf-matrix-raw} and~\ref{fig:conf-matrix-final} summarise test-set predictions for irrigation and fan using the raw and final feature sets.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{nutrients_over_time.png}
+    \caption{Nutrient index and water level over time, with irrigation events indicated.}
+    \label{fig:nutrients-over-time}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{conf_matrix_rawfeatures.png}
+    \caption{Confusion matrices for irrigation and fan predictions on the time-based test set (raw feature set).}
+    \label{fig:conf-matrix-raw}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{conf_matrix_finalfeatures.png}
+    \caption{Confusion matrices for irrigation and fan predictions on the time-based test set (final feature set used in deployment).}
+    \label{fig:conf-matrix-final}
+\end{figure}
+
+Table~\ref{tab:threshold-metrics} reports summary metrics for each threshold and target.  
+Threshold~0.80 achieves a good balance between precision and recall for both actuators; higher thresholds keep precision at~1.0 but progressively reduce recall for irrigation.
+
+\begin{table}[ht]
+    \centering
+    \caption{Summary of evaluation metrics for each threshold and target on the time-based test set.}
+    \label{tab:threshold-metrics}
+    \begin{tabular}{lcccc}
+        \toprule
+        Target & Accuracy & Precision & Recall & F1-score \\
+        \midrule
+        Irrigation\_0.80 & 0.999868 & 1.0 & 0.994253 & 0.997118 \\
+        Fan\_0.80        & 0.994858 & 1.0 & 0.978212 & 0.988986 \\
+        Irrigation\_0.85 & 0.988794 & 1.0 & 0.511494 & 0.676806 \\
+        Fan\_0.85        & 0.994463 & 1.0 & 0.976536 & 0.988129 \\
+        Irrigation\_0.90 & 0.977456 & 1.0 & 0.017241 & 0.033898 \\
+        Fan\_0.90        & 0.994463 & 1.0 & 0.976536 & 0.988129 \\
+        Irrigation\_0.95 & 0.977324 & 1.0 & 0.011494 & 0.022727 \\
+        Fan\_0.95        & 0.994463 & 1.0 & 0.976536 & 0.988129 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[ht]
+    \centering
+    \caption{Classification report for irrigation and fan targets at threshold 0.80.}
+    \label{tab:thr-0.8}
+    \begin{tabular}{lcccc}
+        \toprule
+        \multicolumn{5}{c}{Irrigation (water pump)} \\
+        \midrule
+        Class & Precision & Recall & F1-score & Support \\
+        \midrule
+        0.0 & 0.9999 & 1.0000 & 0.9999 & 7411 \\
+        1.0 & 1.0000 & 0.9943 & 0.9971 & 174 \\
+        \midrule
+        Accuracy     &        &        & 0.9999 & 7585 \\
+        Macro avg    & 0.9999 & 0.9971 & 0.9985 & 7585 \\
+        Weighted avg & 0.9999 & 0.9999 & 0.9999 & 7585 \\
+        \midrule
+        \multicolumn{5}{c}{Fan actuator} \\
+        \midrule
+        Class & Precision & Recall & F1-score & Support \\
+        \midrule
+        0.0 & 0.9933 & 1.0000 & 0.9966 & 5795 \\
+        1.0 & 1.0000 & 0.9782 & 0.9890 & 1790 \\
+        \midrule
+        Accuracy     &        &        & 0.9949 & 7585 \\
+        Macro avg    & 0.9967 & 0.9891 & 0.9928 & 7585 \\
+        Weighted avg & 0.9949 & 0.9949 & 0.9948 & 7585 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[ht]
+    \centering
+    \caption{Classification report for irrigation and fan targets at threshold 0.85.}
+    \label{tab:thr-0.85}
+    \begin{tabular}{lcccc}
+        \toprule
+        \multicolumn{5}{c}{Irrigation (water pump)} \\
+        \midrule
+        Class & Precision & Recall & F1-score & Support \\
+        \midrule
+        0.0 & 0.9887 & 1.0000 & 0.9943 & 7411 \\
+        1.0 & 1.0000 & 0.5115 & 0.6768 & 174 \\
+        \midrule
+        Accuracy     &        &        & 0.9888 & 7585 \\
+        Macro avg    & 0.9943 & 0.7557 & 0.8356 & 7585 \\
+        Weighted avg & 0.9889 & 0.9888 & 0.9870 & 7585 \\
+        \midrule
+        \multicolumn{5}{c}{Fan actuator} \\
+        \midrule
+        Class & Precision & Recall & F1-score & Support \\
+        \midrule
+        0.0 & 0.9928 & 1.0000 & 0.9964 & 5795 \\
+        1.0 & 1.0000 & 0.9765 & 0.9881 & 1790 \\
+        \midrule
+        Accuracy     &        &        & 0.9945 & 7585 \\
+        Macro avg    & 0.9964 & 0.9883 & 0.9923 & 7585 \\
+        Weighted avg & 0.9945 & 0.9945 & 0.9944 & 7585 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[ht]
+    \centering
+    \caption{Classification report for irrigation and fan targets at threshold 0.90.}
+    \label{tab:thr-0.9}
+    \begin{tabular}{lcccc}
+        \toprule
+        \multicolumn{5}{c}{Irrigation (water pump)} \\
+        \midrule
+        Class & Precision & Recall & F1-score & Support \\
+        \midrule
+        0.0 & 0.9774 & 1.0000 & 0.9886 & 7411 \\
+        1.0 & 1.0000 & 0.0172 & 0.0339 & 174 \\
+        \midrule
+        Accuracy     &        &        & 0.9775 & 7585 \\
+        Macro avg    & 0.9887 & 0.5086 & 0.5112 & 7585 \\
+        Weighted avg & 0.9780 & 0.9775 & 0.9667 & 7585 \\
+        \midrule
+        \multicolumn{5}{c}{Fan actuator} \\
+        \midrule
+        Class & Precision & Recall & F1-score & Support \\
+        \midrule
+        0.0 & 0.9928 & 1.0000 & 0.9964 & 5795 \\
+        1.0 & 1.0000 & 0.9765 & 0.9881 & 1790 \\
+        \midrule
+        Accuracy     &        &        & 0.9945 & 7585 \\
+        Macro avg    & 0.9964 & 0.9883 & 0.9923 & 7585 \\
+        Weighted avg & 0.9945 & 0.9945 & 0.9944 & 7585 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[ht]
+    \centering
+    \caption{Classification report for irrigation and fan targets at threshold 0.95.}
+    \label{tab:thr-0.95}
+    \begin{tabular}{lcccc}
+        \toprule
+        \multicolumn{5}{c}{Irrigation (water pump)} \\
+        \midrule
+        Class & Precision & Recall & F1-score & Support \\
+        \midrule
+        0.0 & 0.9773 & 1.0000 & 0.9885 & 7411 \\
+        1.0 & 1.0000 & 0.0115 & 0.0227 & 174 \\
+        \midrule
+        Accuracy     &        &        & 0.9773 & 7585 \\
+        Macro avg    & 0.9887 & 0.5057 & 0.5056 & 7585 \\
+        Weighted avg & 0.9778 & 0.9773 & 0.9664 & 7585 \\
+        \midrule
+        \multicolumn{5}{c}{Fan actuator} \\
+        \midrule
+        Class & Precision & Recall & F1-score & Support \\
+        \midrule
+        0.0 & 0.9928 & 1.0000 & 0.9964 & 5795 \\
+        1.0 & 1.0000 & 0.9765 & 0.9881 & 1790 \\
+        \midrule
+        Accuracy     &        &        & 0.9945 & 7585 \\
+        Macro avg    & 0.9964 & 0.9883 & 0.9923 & 7585 \\
+        Weighted avg & 0.9945 & 0.9945 & 0.9944 & 7585 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Robustness to Noisy Training}
+
+To probe robustness, we repeat training after injecting synthetic noise into the input features and evaluate again on the clean time-based test set.  
+Tables~\ref{tab:noise-irrigation} and~\ref{tab:noise-fan} show the resulting classification reports.
+
+\begin{table}[ht]
+    \centering
+    \caption{Classification report for the irrigation (water pump) target under noisy training.}
+    \label{tab:noise-irrigation}
+    \begin{tabular}{lcccc}
+        \toprule
+        Class & Precision & Recall & F1-score & Support \\
+        \midrule
+        0.0 & 0.9950 & 1.0000 & 0.9975 & 7411 \\
+        1.0 & 1.0000 & 0.7874 & 0.8810 & 174 \\
+        \midrule
+        Accuracy    &       &        & 0.9951 & 7585 \\
+        Macro avg   & 0.9975 & 0.8937 & 0.9393 & 7585 \\
+        Weighted avg& 0.9951 & 0.9951 & 0.9948 & 7585 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[ht]
+    \centering
+    \caption{Classification report for the fan actuator target under noisy training.}
+    \label{tab:noise-fan}
+    \begin{tabular}{lcccc}
+        \toprule
+        Class & Precision & Recall & F1-score & Support \\
+        \midrule
+        0.0 & 1.0000 & 1.0000 & 1.0000 & 5795 \\
+        1.0 & 1.0000 & 1.0000 & 1.0000 & 1790 \\
+        \midrule
+        Accuracy    &       &        & 1.0000 & 7585 \\
+        Macro avg   & 1.0000 & 1.0000 & 1.0000 & 7585 \\
+        Weighted avg& 1.0000 & 1.0000 & 1.0000 & 7585 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Feature Importance}
+
+Random Forest feature importances, visualised in Figure~\ref{fig:feature-importance}, confirm that water-related and temperature-related variables dominate the decision process.  
+In particular, \textbf{water\_level} and \textbf{nutrient\_index} are the strongest predictors for irrigation, while \textbf{temperature} and \textbf{humidity} play a larger role in fan activation.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.8\linewidth]{feature_importance.png}
+    \caption{Feature importances of the trained Random Forest model.}
+    \label{fig:feature-importance}
+\end{figure}
+
+
+\FloatBarrier
 
 \section{Conclusion}\label{sec:conclusion}
 
-% TODO: Write the conclusion here.
-% Suggested points:
-% - What the Smart Agriculture Prediction System achieves in practice
-% - Benefits and limitations of the current model and app
-% - Ideas for future improvements (better sensors, more advanced time-series models, richer schedules)
+The Smart Agriculture Prediction System demonstrates that a relatively simple, well-engineered multi-output Random Forest can accurately reproduce greenhouse irrigation and ventilation decisions from historical sensor data.  
+By respecting temporal structure during training and evaluation, and by carefully aligning the deployed Flask app with the notebook pipeline, the system achieves near-perfect classification performance on a realistic time-based test split and is immediately usable through a lightweight web interface.  
 
+The main strengths of the current approach are its interpretability (through feature importances), robustness to noisy and missing readings thanks to tree-based modelling and preprocessing, and low inference latency suitable for real-time applications.  
+Limitations include reliance on a single greenhouse and season, and the absence of explicit long-term temporal dynamics beyond the engineered time features.  
+Future work could expand the dataset across more seasons and locations, incorporate additional external data sources such as weather forecasts, and explore more advanced time-series architectures while preserving the practical deployment pathway established in this project.
 
 \end{document}
-
